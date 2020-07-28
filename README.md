@@ -7,9 +7,9 @@
   - they can all be runned by executing (from this root directory):
     python -m unittest discover tests
   - or a specific test (e.g. test_coherent_NiAl.py) can be runned executing directly:
-    python test_coherent_NiAl.py
+    python tests/test_coherent_NiAl.py
 
-The original OpenIEC README follows the: 
+The original OpenIEC README follows: 
 
 ## OpenIEC: An open-source code for interfacial energy calculation in alloys
 
