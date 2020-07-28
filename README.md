@@ -2,12 +2,12 @@
 
 - requires python interface to OpenCalphad, not yest publicly available
 - env.sh is to be modified so that PYTHONPATH correctly contains the path to this OC python interface and then executed by:
-	source env.sh
+    source env.sh
 - unit tests associated with classes added for using OpenCalphad to be found in the tests folder
   - they can all be runned by executing (from this root directory):
-	python -m unittest discover tests
+    python -m unittest discover tests
   - or a specific test (e.g. test_coherent_NiAl.py) can be runned executing directly:
-	python test_coherent_NiAl.py
+    python test_coherent_NiAl.py
 
 The original OpenIEC README follows the: 
 
