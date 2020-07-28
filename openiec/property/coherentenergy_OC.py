@@ -10,16 +10,13 @@ class CoherentGibbsEnergy_OC(object):
     __verbosity = None
     
     @classmethod
-    def initOC(cls, db, comps, verbosity):
+    def initOC(cls, db, comps):
         cls.__db  = db
         cls.__comps = comps
-        cls.__verbosity = verbosity
-        # set verbosity
-        oc.setVerbosity(cls.__verbosity)
         # read database
         oc.readtdb(cls.__db, tuple([comp for comp in cls.__comps if comp != 'VA']))
 
-    def __init__(self, T, P, phasenames, enforceGridMinimizerForLocalEq=False):
+    def __init__(self, T, P, phasenames, verbosity=False, enforceGridMinimizerForLocalEq=False):
         if (self.__db==None):
             raise RuntimeError('database has not been set, class method initOC should be called first')
         self.__T = T
@@ -29,7 +26,6 @@ class CoherentGibbsEnergy_OC(object):
         else:
             self.__phasenames = [phasenames]
         # see in which case we are: global or local equilibrium
-        print(self.__phasenames, len(self.__phasenames))
         if (len(self.__phasenames)==2):
             self.__gridMinimizerStatus = gmStat.On
         elif(len(self.__phasenames)==1):
@@ -39,6 +35,8 @@ class CoherentGibbsEnergy_OC(object):
                 self.__gridMinimizerStatus = gmStat.Off
         else:
             raise ValueError('invalid number of phases provided (should be one or two)')
+        # set verbosity
+        oc.setVerbosity(verbosity)
         self.__eq_val = None
             
     def __eqfunc(self, x):
@@ -59,7 +57,6 @@ class CoherentGibbsEnergy_OC(object):
             elementMolarAmounts[self.__comps[count]]=x[i]
             count=count+1
         elementMolarAmounts[self.__comps[0]]=1.0-xSum
-        print(elementMolarAmounts)
         oc.setElementMolarAmounts(elementMolarAmounts)
         # calculate equilibrium
         oc.calculateEquilibrium(self.__gridMinimizerStatus)
