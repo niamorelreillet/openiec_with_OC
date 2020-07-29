@@ -33,7 +33,7 @@ def SigmaCoherent_OC(
     limit: list
         The limit of composition for searching interfacial composition in equilibrium.
     purevms: list
-        The molar volumes of pure components.
+        The molar volumes of pure components (expression) or the interfacial molar volumes (functions)
     dx: float
         The step of composition for searching interfacial composition in equilibrium.
 
@@ -54,12 +54,16 @@ def SigmaCoherent_OC(
 
     Return type: xarray Dataset
     """
-    phasevm = [MolarVolume(Database(db), phasenames[i], comps, purevms[i]) for i in range(2)]
-    _vmis = InterficialMolarVolume(*phasevm)
-
-    """decorate the _vmis to release the constains on temperature"""
-    vmis = [wraptem(T, f) for f in _vmis]
-    
+    if (type(purevms[0])==list):
+        # the molar volumes of pure components are given as expressions (original openIEC implementation)
+        phasevm = [MolarVolume(Database(db), phasenames[i], comps, purevms[i]) for i in range(2)]
+        _vmis = InterficialMolarVolume(*phasevm)
+        """decorate the _vmis to release the constains on temperature"""
+        vmis = [wraptem(T, f) for f in _vmis]
+    else:
+        # the molar volumes of pure components directly given as functions
+        vmis = purevms
+        
     CoherentGibbsEnergy_OC.initOC(db, comps)
     model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
 
