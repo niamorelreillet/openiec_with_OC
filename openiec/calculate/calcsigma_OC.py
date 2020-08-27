@@ -69,6 +69,8 @@ def SigmaCoherent_OC(
 
     """Chemical potentials in two-phase equilibrium"""
     mueq = model.chemicalpotential(x0)
+    
+    CoherentGibbsEnergy_OC.initOC(db, comps)
 
     """Chemical potentials in two bulk phases"""
     model_phase = [

@@ -76,7 +76,7 @@ class CoherentGibbsEnergy_OC(object):
         self.__eq_val = [ mu[comp] for comp in self.__comps if comp != 'VA' ]
         return self.__eq_val
     
-# molar volume related methods  
+    # molar volume related methods  
     def constantPartialMolarVolumeFunctions(self, x, constituentMassDensityLaws, epsilon=1E-6):
         partialMolarVolumes,exactVolume,approxVolume = self.calculatePartialMolarVolume(self.__calculateMolarAmounts(x), constituentMassDensityLaws, epsilon)
         volumeError=(approxVolume/exactVolume-1.0)*100.0
@@ -150,7 +150,7 @@ class CoherentGibbsEnergy_OC(object):
         density=1.0/density
         # total mass (mass is 'B' in OC)
         mass=oc.getScalarResult('B')
-        return mass/density
+        return mass*1E-3/density
         
 # methods that are common with CoherentGibbsEnergy class (based on pyCalphad)
     def Gibbsenergy(self, x):
