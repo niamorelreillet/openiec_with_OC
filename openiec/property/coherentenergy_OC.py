@@ -10,7 +10,7 @@ class CoherentGibbsEnergy_OC(object):
     __verbosity = None
     def __identity(x):
         return x
-    
+
     @classmethod
     def initOC(cls, db, comps):
         cls.__db  = db
@@ -40,11 +40,14 @@ class CoherentGibbsEnergy_OC(object):
         # set verbosity
         oc.setVerbosity(verbosity)
         self.__eq_val = None
-            
-    def __eqfunc(self, x):
-        # suspend all other phases
-        oc.setPhasesStatus(('* ',), phStat.Suspended)
-        oc.setPhasesStatus(tuple(self.__phasenames), phStat.Entered, 1.0)
+
+    def __eqfunc(self, x, phasesSuspended=True):
+        if (phasesSuspended):
+            # suspend all other phases
+            oc.setPhasesStatus(('* ',), phStat.Suspended)
+            oc.setPhasesStatus(tuple(self.__phasenames), phStat.Entered, 1.0)
+        else:
+            oc.setPhasesStatus(('* ',), phStat.Entered, 1.0)
         # set temperature and pressure
         oc.setTemperature(self.__T)
         oc.setPressure(self.__P)
@@ -59,14 +62,14 @@ class CoherentGibbsEnergy_OC(object):
         for i in range(len(x)):
             xSum += x[i]
         elementMolarAmounts[self.__comps[0]]=1.0-xSum
-        count = 1 
+        count = 1
         for i in range(len(x)):
             if (self.__comps[i]=='VA'):
                 count=count+1
             elementMolarAmounts[self.__comps[count]]=x[i]
             count=count+1
         return elementMolarAmounts
-        
+
     def getGibbsEnergy(self):
         self.__eq_val = [ oc.getGibbsEnergy() ]
         return self.__eq_val
@@ -75,8 +78,8 @@ class CoherentGibbsEnergy_OC(object):
         mu = oc.getChemicalPotentials()
         self.__eq_val = [ mu[comp] for comp in self.__comps if comp != 'VA' ]
         return self.__eq_val
-    
-# molar volume related methods  
+
+# molar volume related methods
     def constantPartialMolarVolumeFunctions(self, x, constituentMassDensityLaws, epsilon=1E-6):
         partialMolarVolumes,exactVolume,approxVolume = self.calculatePartialMolarVolume(self.__calculateMolarAmounts(x), constituentMassDensityLaws, epsilon)
         volumeError=(approxVolume/exactVolume-1.0)*100.0
@@ -84,10 +87,10 @@ class CoherentGibbsEnergy_OC(object):
             print(volumeError,approxVolume,exactVolume)
             #raise RuntimeError('volume error is too high')
         return [ (lambda comp : lambda _: partialMolarVolumes[comp])(comp) for comp in self.__comps if comp != 'VA' ]
-                     
+
     ## evaluate partial molar volumes by an approximation of the first order volume derivative by a second-order finite difference formula
     def calculatePartialMolarVolume(self,elementMolarAmounts,constituentMassDensityLaws,epsilon):
-        print(elementMolarAmounts, epsilon)
+        #print(elementMolarAmounts, epsilon)
         # suspend all other phases
         oc.setPhasesStatus(('* ',), phStat.Suspended)
         oc.setPhasesStatus(tuple(self.__phasenames), phStat.Entered, 1.0)
@@ -105,13 +108,13 @@ class CoherentGibbsEnergy_OC(object):
             # evaluate volume for n[element]+epsilone
             modifiedElementMolarAmounts=elementMolarAmounts.copy()
             modifiedElementMolarAmounts[element] += epsilon
-            print(element, modifiedElementMolarAmounts)
+            #print(element, modifiedElementMolarAmounts)
             oc.setElementMolarAmounts(modifiedElementMolarAmounts)
             oc.calculateEquilibrium(gmStat.Off)
             volumePlus = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),constituentMassDensityLaws)
             # evaluate volume for n[element]-epsilone
             modifiedElementMolarAmounts[element] -= 2.0*epsilon
-            print(element, modifiedElementMolarAmounts)
+            #print(element, modifiedElementMolarAmounts)
             oc.setElementMolarAmounts(modifiedElementMolarAmounts)
             oc.calculateEquilibrium(gmStat.Off)
             volumeMinus = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),constituentMassDensityLaws)
@@ -121,7 +124,7 @@ class CoherentGibbsEnergy_OC(object):
         for element, molarAmount in oc.getPhasesAtEquilibrium().getPhaseElementComposition()[list(oc.getPhasesAtEquilibrium().getPhaseElementComposition())[0]].items():
             approxVolume+=molarAmount*partialMolarVolumes[element]
         return partialMolarVolumes,exactVolume,approxVolume
-        
+
     ## convert constituent molar fractions to mass fractions
     def __convertConstituentMolarToMassFractions(self,constituentMolarFractions,constituentsDescription):
         constituentMassFractions=constituentMolarFractions.copy()
@@ -132,11 +135,11 @@ class CoherentGibbsEnergy_OC(object):
         fac = 1.0/tot
         for constituent in constituentMassFractions:
             constituentMassFractions[constituent] *= fac
-        return constituentMassFractions     
+        return constituentMassFractions
 
-    ## function to calculate molar volume from constituent 
+    ## function to calculate molar volume from constituent
     def __calculateVolume(self,phaseConstituentComposition,constituentsDescription,constituentMassDensityLaws):
-        print(phaseConstituentComposition.keys())
+        #print(phaseConstituentComposition.keys())
         if (len(phaseConstituentComposition) != 1):
             print('error: not a single phase (%s) at equilibrium for molar volume calculation' % list(phaseConstituentComposition.keys()))
             exit()
@@ -150,14 +153,14 @@ class CoherentGibbsEnergy_OC(object):
         density=1.0/density
         # total mass (mass is 'B' in OC)
         mass=oc.getScalarResult('B')
-        return mass/density
-        
+        return mass*1E-3/density
+
 # methods that are common with CoherentGibbsEnergy class (based on pyCalphad)
     def Gibbsenergy(self, x):
         self.__eqfunc(x)
         return self.getGibbsEnergy()
-        
-    def chemicalpotential(self, x):
-        self.__eqfunc(x)
+
+    def chemicalpotential(self, x, phasesSuspended=True):
+        self.__eqfunc(x, phasesSuspended)
         return self.getChemicalPotentials();
 

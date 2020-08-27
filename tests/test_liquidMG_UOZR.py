@@ -38,9 +38,9 @@ class test_liqMG_UOZr(unittest.TestCase):
         x = [0.343298, 0.241778]   # U, Zr content (component molar fractions excluding the first one in comps)
         #
         functions=model.constantPartialMolarVolumeFunctions(x, self.__constituentDensityLaws)
-        np.testing.assert_allclose(0.005934892340596354, functions[0](x), rtol=1e-6, atol=1E-6)
-        np.testing.assert_allclose(0.015389805158548542, functions[1](x), rtol=1e-6, atol=1E-6)
-        np.testing.assert_allclose(0.012607127224985304, functions[2](x), rtol=1e-6, atol=1E-6)
+        np.testing.assert_allclose(0.005934892340596354*1E-3, functions[0](x), rtol=1e-6, atol=1E-6)
+        np.testing.assert_allclose(0.015389805158548542*1E-3, functions[1](x), rtol=1e-6, atol=1E-6)
+        np.testing.assert_allclose(0.012607127224985304*1E-3, functions[2](x), rtol=1e-6, atol=1E-6)
         
     # not ready yet!
     def test_WithSigmaCoherent(self):
@@ -74,7 +74,7 @@ class test_liqMG_UOZr(unittest.TestCase):
             purevms=functions,
             limit=limit,
             dx=dx,
-            enforceGridMinimizerForLocalEq=True
+            enforceGridMinimizerForLocalEq=False
         )
     
         # Print the calculated interfacial energy with xarray.Dataset type.

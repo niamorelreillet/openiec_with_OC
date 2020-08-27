@@ -9,6 +9,7 @@ from openiec.property.molarvolume import MolarVolume, InterficialMolarVolume
 from openiec.calculate.minimize import SearchEquilibrium, ComputeEquilibrium
 from openiec.utils.decorafunc import wraptem
 from pycalphad import Database
+from pyOC import opencalphad as oc
 import numpy as np
 from xarray import Dataset
 
@@ -29,7 +30,7 @@ def SigmaCoherent_OC(
     comps : list
         Names of components to consider in the calculation.
     phasenames : list
-        Names of phase model to build.    
+        Names of phase model to build.
     limit: list
         The limit of composition for searching interfacial composition in equilibrium.
     purevms: list
@@ -37,7 +38,7 @@ def SigmaCoherent_OC(
     dx: float
         The step of composition for searching interfacial composition in equilibrium.
 
-    Returns:   
+    Returns:
     -----------
     Components：list of str
         Given components.
@@ -49,7 +50,7 @@ def SigmaCoherent_OC(
         Interfacial composition of the grid minimization.
     Partial_Interfacial_Energies: list
         Partial interfacial energies of components.
-    Interfacial_Energy: float    
+    Interfacial_Energy: float
         Requested interfacial energies.
 
     Return type: xarray Dataset
@@ -63,12 +64,15 @@ def SigmaCoherent_OC(
     else:
         # the molar volumes of pure components directly given as functions
         vmis = purevms
-        
+
     CoherentGibbsEnergy_OC.initOC(db, comps)
     model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
 
     """Chemical potentials in two-phase equilibrium"""
+    #oc.raw().pytqtgsw(19) # set sparse grid for convergence issues
     mueq = model.chemicalpotential(x0)
+
+    CoherentGibbsEnergy_OC.initOC(db, comps)
 
     """Chemical potentials in two bulk phases"""
     model_phase = [
