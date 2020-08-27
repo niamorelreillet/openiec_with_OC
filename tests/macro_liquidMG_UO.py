@@ -52,9 +52,10 @@ def testUO():
 
         phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
         phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
-        diff = set(phasesAtEquilibriumMolarAmounts) - set(['LIQUID#1', 'LIQUID_AUTO#2'])
+        phasesAtEquilibriumElementCompositions = phasesAtEquilibrium.getPhaseElementComposition()
+        diff = set(phasesAtEquilibriumMolarAmounts) - set(['LIQUID', 'LIQUID_AUTO#2'])
+        print(diff)
         if (len(diff)==0):
-            phasesAtEquilibriumElementCompositions = phasesAtEquilibrium.getPhaseElementComposition()
             # calculate interfacial energy
             sigma = SigmaCoherent_OC(
                 T=T,
@@ -68,12 +69,12 @@ def testUO():
                 enforceGridMinimizerForLocalEq=False
             )
             print('at T=', T, ' sigma=', sigma.Interfacial_Energy.values, '\n')
-            if (sigma.Interfacial_Energy.values>0):
+            if (np.abs(sigma.Interfacial_Energy.values)>1E-6):
                 # store results in pandas dataframe
                 results = results.append({'temperature' : T,
-                                        'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID#1'],
+                                        'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID'],
                                         'n_phase2' : phasesAtEquilibriumMolarAmounts['LIQUID_AUTO#2'],
-                                        'xU_phase1' : phasesAtEquilibriumElementCompositions['LIQUID#1']['U'],
+                                        'xU_phase1' : phasesAtEquilibriumElementCompositions['LIQUID']['U'],
                                         'xU_phase2' : phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2']['U'],
                                         'xU_interface' : sigma.Interfacial_Composition.values[1],
                                         'sigma' : sigma.Interfacial_Energy.values,
