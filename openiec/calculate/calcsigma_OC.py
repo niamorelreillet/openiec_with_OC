@@ -71,6 +71,8 @@ def SigmaCoherent_OC(
     """Chemical potentials in two-phase equilibrium"""
     #oc.raw().pytqtgsw(19) # set sparse grid for convergence issues
     mueq = model.chemicalpotential(x0)
+    
+    CoherentGibbsEnergy_OC.initOC(db, comps)
 
     CoherentGibbsEnergy_OC.initOC(db, comps)
 
