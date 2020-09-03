@@ -54,7 +54,7 @@ def run():
 
         phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
         phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
-        diff = set(phasesAtEquilibriumMolarAmounts) - set(['LIQUID#1', 'LIQUID_AUTO#2'])
+        diff = set(phasesAtEquilibriumMolarAmounts) - set(['LIQUID', 'LIQUID_AUTO#2'])
         phasesAtEquilibriumElementCompositions = phasesAtEquilibrium.getPhaseElementComposition()
         if (len(diff)==0):
             # calculate interfacial energy
@@ -73,9 +73,9 @@ def run():
             if (np.abs(sigma.Interfacial_Energy.values)>1E-6):
                 # store results in pandas dataframe
                 results = results.append({'temperature' : T,
-                                        'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID#1'],
+                                        'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID'],
                                         'n_phase2' : phasesAtEquilibriumMolarAmounts['LIQUID_AUTO#2'],
-                                        'xU_phase1' : phasesAtEquilibriumElementCompositions['LIQUID#1']['U'],
+                                        'xU_phase1' : phasesAtEquilibriumElementCompositions['LIQUID']['U'],
                                         'xU_phase2' : phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2']['U'],
                                         'xU_interface' : sigma.Interfacial_Composition.values[1],
                                         'sigma' : sigma.Interfacial_Energy.values,
