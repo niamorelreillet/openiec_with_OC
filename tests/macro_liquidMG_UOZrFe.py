@@ -10,36 +10,40 @@ from openiec.calculate.calcsigma_OC import SigmaCoherent_OC
 from pyOC import opencalphad as oc
 
 def run():
-    print('### test U-O coherent interface in the liquid miscibility gap ###\n')
+    print('### test U-O-Zr-Fe coherent interface in the liquid miscibility gap ###\n')
     # tdb filepath
     tdbFile=os.environ['TDBDATA_PRIVATE']+'/feouzr.tdb'
     # components
-    comps = ['O', 'U']
+    comps = ['O', 'U', 'ZR', 'FE']
     # mass density laws (from Barrachin2004)
     constituentDensityLaws = {
         'U1'   : lambda T: 17270.0-1.358*(T-1408),
         'ZR1'  : lambda T: 6844.51-0.609898*T+2.05008E-4*T**2-4.47829E-8*T**3+3.26469E-12*T**4,
         'O2U1' : lambda T: 8860.0-9.285E-1*(T-3120),
         'O2ZR1': lambda T: 5150-0.445*(T-2983),
-        'O1'   : lambda T: 1.141 # set to meaningless value but ok as, no 'free' oxygen in the considered mixtures
+        'FE1'  : lambda T: 7030 - 0.88*(T-1808),
+        'NI1'  : lambda T: 7900 - 1.19*(T-1728),
+        'CR1'  : lambda T: 6290 - 0.72*(T-2178),
+        'O1'   : lambda T: 1.141, # set to meaningless value but ok as, no 'free' oxygen in the considered mixtures
+        'FE1O1'  : lambda T: 7030 - 0.88*(T-1808), # set to Fe value but ok as, almost no such component in the considered mixtures
+        'FE1O1_5'  : lambda T: 7030 - 0.88*(T-1808), # set to Fe value but ok as, almost no such component in the considered mixtures
     }
     # phase names
     phasenames = ['LIQUID', 'LIQUID']
     # pressure
     P = 1E5
-    # Given initial alloy composition. x0 is the mole fraction of U.
-    #x0 = [0.9] #-> [7.53632803e-01 4.32201718e+03 1.93787092e+00 1.71526332e-03] [1.69890583e-04 9.85821940e-01 7.24937494e-04 2.80752681e-05]
-    #x0 = [0.45] #-> [7.50712132e-01 4.28299001e+03 1.92012575e+00 3.50239927e-03] [2.40830458e-04 1.49782091e+00 1.05930421e-03 4.55422192e-05]
-    x0 = [0.65] #-> [7.57784771e-01 4.34426716e+03 1.95474916e+00 1.09346193e-03] [2.09793956e-04 8.36946862e-01 7.40811928e-04 1.90484068e-05]
+    # Given initial alloy composition. x0 is the mole fractions of U, Zr, Fe.
+    # RU/Zr=1.2 CZr=0.3 xSteel=0.1
+    x0 = [0.20131833168321586, 0.1677652764026799, 0.12762056270606442]
     # Composition range for searching initial interfacial equilibrium composition.
     limit = [0.0001, 0.9]
     # Composition step for searching initial interfacial equilibrium composition.
     dx = 0.1
 
     # temperature range
-    Tmin = 2800.0
-    Tmax = 4400.0
-    Trange = np.linspace(Tmin, Tmax, num=50, endpoint=True)
+    Tmin = 2900.0
+    Tmax = 3400.0
+    Trange = np.linspace(Tmin, Tmax, num=10, endpoint=True)
     results = pd.DataFrame(columns=['temperature', 'n_phase1', 'n_phase2', 'xU_phase1', 'xU_phase2', 'xU_interface', 'sigma'])
 
     for T in Trange:
@@ -77,7 +81,13 @@ def run():
                                         'n_phase2' : phasesAtEquilibriumMolarAmounts['LIQUID_AUTO#2'],
                                         'xU_phase1' : phasesAtEquilibriumElementCompositions['LIQUID#1']['U'],
                                         'xU_phase2' : phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2']['U'],
+                                        'xZr_phase1' : phasesAtEquilibriumElementCompositions['LIQUID#1']['ZR'],
+                                        'xZr_phase2' : phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2']['ZR'],
+                                        'xFe_phase1' : phasesAtEquilibriumElementCompositions['LIQUID#1']['FE'],
+                                        'xFe_phase2' : phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2']['FE'],
                                         'xU_interface' : sigma.Interfacial_Composition.values[1],
+                                        'xZr_interface' : sigma.Interfacial_Composition.values[2],
+                                        'xFe_interface' : sigma.Interfacial_Composition.values[3],
                                         'sigma' : sigma.Interfacial_Energy.values,
                                         },
                         ignore_index = True)
@@ -86,11 +96,12 @@ def run():
         else:
             print('at T=', T, ' out of the miscibility gap')
         print('phases at equilibrium:', phasesAtEquilibriumMolarAmounts)
+        print(phasesAtEquilibriumElementCompositions)
     # write csv result file
-    results.to_csv('macro_liquidMG_UO_run.csv')
+    results.to_csv('macro_liquidMG_UOZrFe_run.csv')
 
 def fit():
-    results = pd.read_csv('macro_liquidMG_UO_run.csv')
+    results = pd.read_csv('macro_liquidMG_UOZrFe_run.csv')
     # Function to calculate the power-law with constants sigma0, Tc, mu, sigmaC
     def power_law_plus_const(T, sigma0, Tc, mu, sigmaC):
         return sigma0*np.power(1.0-T/Tc, mu)+sigmaC
@@ -109,9 +120,9 @@ def fit():
     print(pars, stdevs)
 
     plt.rcParams['figure.figsize'] = (12,7)
-    fig,axes=plt.subplots(2,2,constrained_layout=True)
+    fig,axes=plt.subplots(1,2,constrained_layout=True)
     # Plots associated with interfacial energy
-    ax = axes[0,0]
+    ax = axes[0]
     ax.grid(True)
     ax.plot(results['temperature'], results['sigma'], marker = 'o', ls='', color='tab:cyan', label='calculated values: $\sigma_{calculated}$')
     legLabel = 'fit: $\sigma_{fit}='+'{0:4.3f} (1-T/{1:4.1f})^'.format(pars[0], pars[1])+'{'+'{0:4.3f}'.format(pars[2])+'}$'
@@ -119,26 +130,14 @@ def fit():
     ax.set_xlabel('temperature T (K)',fontsize=12)
     ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)
     ax.legend(loc='upper right')
-    ax = axes[0,1]
+    ax = axes[1]
     ax.grid(True)
     ax.plot(results['temperature'], res, marker = 'o', ls='', color='tab:cyan')
     ax.set_xlabel('temperature T (K)',fontsize=12)
     ax.set_ylabel('fit residuals $\sigma_{fit} - \sigma_{calculated}$ (N.m$^{-1}$)',fontsize=12)
     ax.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
-    # Plots associated with composition
-    ax = axes[1,0]
-    ax.plot(results['xU_phase1'], results['temperature'], marker = '', ls='-', color='tab:red', label='bulk liquid 1')
-    ax.plot(results['xU_phase2'], results['temperature'], marker = '', ls='-', color='tab:green', label='bulk liquid 2')
-    ax.plot(results['xU_interface'], results['temperature'], marker = '', ls='-', color='tab:cyan', label='interface')
-    ax.set_ylabel('temperature T (K)',fontsize=12)
-    ax.set_xlabel('U molar fraction',fontsize=12)
-    ax.legend(loc='upper right')
-    ax = axes[1,1]
-    ax.plot(results['xU_interface'], results['sigma'], marker = 'o', ls='--', color='tab:cyan')
-    ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)
-    ax.set_xlabel('interface U molar fraction',fontsize=12)
 
-    plt.savefig('macro_liquidMG_UO_fit.pdf')
+    plt.savefig('macro_liquidMG_UOZrFe_fit.pdf')
     plt.show()
 
 if __name__ == '__main__':
