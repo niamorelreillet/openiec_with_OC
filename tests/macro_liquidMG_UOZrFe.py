@@ -9,6 +9,67 @@ from openiec.property.coherentenergy_OC import CoherentGibbsEnergy_OC
 from openiec.calculate.calcsigma_OC import SigmaCoherent_OC
 from pyOC import opencalphad as oc
 
+def run_UO2_Fe():
+    print('### test UO2-Fe coherent interface ###\n')
+    # tdb filepath
+    tdbFile=os.environ['TDBDATA_PRIVATE']+'/feouzr.tdb'
+    # components
+    comps = ['O', 'U', 'FE']
+    # mass density laws (from Barrachin2004)
+    constituentDensityLaws = {
+        'U1'   : lambda T: 17270.0-1.358*(T-1408),
+        'ZR1'  : lambda T: 6844.51-0.609898*T+2.05008E-4*T**2-4.47829E-8*T**3+3.26469E-12*T**4,
+        'O2U1' : lambda T: 8860.0-9.285E-1*(T-3120),
+        'O2ZR1': lambda T: 5150-0.445*(T-2983),
+        'FE1'  : lambda T: 7030 - 0.88*(T-1808),
+        'NI1'  : lambda T: 7900 - 1.19*(T-1728),
+        'CR1'  : lambda T: 6290 - 0.72*(T-2178),
+        'O1'   : lambda T: 1.141, # set to meaningless value but ok as, no 'free' oxygen in the considered mixtures
+        'FE1O1' : lambda T: 7030 - 0.88*(T-1808), # set to Fe value but ok as, almost no such component in the considered mixtures
+        'FE1O1_5' : lambda T: 7030 - 0.88*(T-1808), # set to Fe value but ok as, almost no such component in the considered mixtures
+    }
+    # phase names
+    phasenames = ['LIQUID', 'LIQUID']
+    # pressure
+    P = 1E5
+    # Given initial alloy composition. x0 is the mole fractions of U, Fe.
+    x0 = [0.25, 1.0-0.25-0.49]
+    # Composition range for searching initial interfacial equilibrium composition.
+    limit = [0.0001, 0.9]
+    # Composition step for searching initial interfacial equilibrium composition.
+    dx = 0.1
+
+    T = 3300.0
+    # Molar volumes of pure components evaluated at x0 and kept constant afterwards
+    CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
+    model = CoherentGibbsEnergy_OC(T, P, phasenames[0], False)
+    functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5)
+    # calculate global equilibrium
+    model = CoherentGibbsEnergy_OC(T, P, phasenames, False)
+    mueq = model.chemicalpotential(x0)
+
+    phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
+    phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
+    diff = set(phasesAtEquilibriumMolarAmounts) - set(['LIQUID#1', 'LIQUID_AUTO#2'])
+    if (len(diff)==0):
+        phasesAtEquilibriumElementCompositions = phasesAtEquilibrium.getPhaseElementComposition()
+        # calculate interfacial energy
+        sigma = SigmaCoherent_OC(
+            T=T,
+            x0=x0,
+            db=tdbFile,
+            comps=comps,
+            phasenames=phasenames,
+            purevms=functions,
+            limit=limit,
+            dx=dx,
+            enforceGridMinimizerForLocalEq=False,
+            mueq=mueq
+        )
+        print('at T=', T, ' sigma=', sigma.Interfacial_Energy.values, '\n')
+    else:
+        print('at T=', T, ' out of the miscibility gap')
+
 def run():
     print('### test U-O-Zr-Fe coherent interface in the liquid miscibility gap ###\n')
     # tdb filepath
@@ -35,14 +96,12 @@ def run():
     # Given initial alloy composition. x0 is the mole fractions of U, Zr, Fe.
     # RU/Zr=1.2 CZr=0.3 xSteel=0.1
     x0 = [0.20131833168321586, 0.1677652764026799, 0.12762056270606442]
-    # Composition range for searching initial interfacial equilibrium composition.
-    limit = [0.0001, 0.9]
     # Composition step for searching initial interfacial equilibrium composition.
     dx = 0.1
 
     # temperature range
-    Tmin = 2900.0
-    Tmax = 3400.0
+    Tmin = 2800.0
+    Tmax = 4200.0
     Trange = np.linspace(Tmin, Tmax, num=10, endpoint=True)
     results = pd.DataFrame(columns=['temperature', 'n_phase1', 'n_phase2', 'xU_phase1', 'xU_phase2', 'xU_interface', 'sigma'])
 
@@ -51,16 +110,43 @@ def run():
         CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
         model = CoherentGibbsEnergy_OC(T, P, phasenames[0], False)
         functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5)
-        # calculate global equilibrium
-        model = CoherentGibbsEnergy_OC(T, P, phasenames, False)
-        #oc.raw().pytqtgsw(19) # set sparse grid for convergence issues
-        model.chemicalpotential(x0)
 
+        # calculate global equilibrium and retrieve associated chemical potentials
+        model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
+        mueq = model.chemicalpotential(x0)
         phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
         phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
-        diff = set(phasesAtEquilibriumMolarAmounts) - set(['LIQUID#1', 'LIQUID_AUTO#2'])
+        if (len(phasesAtEquilibriumMolarAmounts)==1):
+            # it is possible that the miscibility gap has not been detected correctly (can happen when T increases)
+            #print(phasesAtEquilibriumMolarAmounts)
+            # ad hoc strategy: 1) calculate an equilibrium at lower temperature (hopefully finding the two phases)
+            #                  2) redo the calculation at the target temperature afterwards without the grid minimizer
+            model = CoherentGibbsEnergy_OC(T-300.0, 1E5, phasenames)
+            mueq = model.chemicalpotential(x0)
+            phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
+            phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
+            #print(phasesAtEquilibriumMolarAmounts)
+            oc.setTemperature(T)
+            oc.calculateEquilibrium(gmStat.Off)
+            mueq = model.getChemicalPotentials()
+            phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
+            phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
+
         phasesAtEquilibriumElementCompositions = phasesAtEquilibrium.getPhaseElementComposition()
-        if (len(diff)==0):
+        print(phasesAtEquilibriumMolarAmounts)
+        if (set(phasesAtEquilibriumMolarAmounts)==set(['LIQUID#1', 'LIQUID_AUTO#2'])):
+            # Composition range for searching initial interfacial equilibrium composition
+            # calculated from the actual phase compositions
+            componentsWithLimits = comps[1:]
+            limit = [ [1.0, 0.0] for each in componentsWithLimits ]
+            for phase in phasesAtEquilibriumElementCompositions:
+                for element in phasesAtEquilibriumElementCompositions[phase]:
+                    elementMolarFraction = phasesAtEquilibriumElementCompositions[phase][element]
+                    if element in componentsWithLimits:
+                        limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
+                        limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
+            limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
+            print('limits: ', limit)
             # calculate interfacial energy
             sigma = SigmaCoherent_OC(
                 T=T,
@@ -71,7 +157,8 @@ def run():
                 purevms=functions,
                 limit=limit,
                 dx=dx,
-                enforceGridMinimizerForLocalEq=False
+                enforceGridMinimizerForLocalEq=False,
+                mueq=mueq
             )
             print('at T=', T, ' sigma=', sigma.Interfacial_Energy.values, '\n')
             if (np.abs(sigma.Interfacial_Energy.values)>1E-6):
@@ -141,5 +228,6 @@ def fit():
     plt.show()
 
 if __name__ == '__main__':
+    run_UO2_Fe()
     run()
     fit()

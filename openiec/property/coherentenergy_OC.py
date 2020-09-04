@@ -80,16 +80,17 @@ class CoherentGibbsEnergy_OC(object):
         return self.__eq_val
 
 # molar volume related methods
-    def constantPartialMolarVolumeFunctions(self, x, constituentMassDensityLaws, epsilon=1E-6):
-        partialMolarVolumes,exactVolume,approxVolume = self.calculatePartialMolarVolume(self.__calculateMolarAmounts(x), constituentMassDensityLaws, epsilon)
+    def constantPartialMolarVolumeFunctions(self, x, endmemberMassDensityLaws, epsilon=1E-6, constituentToEndmembersConverter=None):
+        partialMolarVolumes,exactVolume,approxVolume = self.calculatePartialMolarVolume(self.__calculateMolarAmounts(x), endmemberMassDensityLaws, epsilon, constituentToEndmembersConverter)
         volumeError=(approxVolume/exactVolume-1.0)*100.0
-        if (abs(volumeError)>1E-4):
-            print(volumeError,approxVolume,exactVolume)
-            #raise RuntimeError('volume error is too high')
+        print(partialMolarVolumes)
+        print(volumeError,approxVolume,exactVolume)
+        if (abs(volumeError)>1E-1):
+            raise RuntimeError('volume error is too high')
         return [ (lambda comp : lambda _: partialMolarVolumes[comp])(comp) for comp in self.__comps if comp != 'VA' ]
 
     ## evaluate partial molar volumes by an approximation of the first order volume derivative by a second-order finite difference formula
-    def calculatePartialMolarVolume(self,elementMolarAmounts,constituentMassDensityLaws,epsilon):
+    def calculatePartialMolarVolume(self,elementMolarAmounts,endmemberMassDensityLaws, epsilon, constituentToEndmembersConverter=None):
         #print(elementMolarAmounts, epsilon)
         # suspend all other phases
         oc.setPhasesStatus(('* ',), phStat.Suspended)
@@ -101,7 +102,7 @@ class CoherentGibbsEnergy_OC(object):
         # evaluate volume
         oc.setElementMolarAmounts(elementMolarAmounts)
         oc.calculateEquilibrium(gmStat.Off)
-        exactVolume = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),constituentMassDensityLaws)
+        exactVolume = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),endmemberMassDensityLaws, constituentToEndmembersConverter)
         # evaluate (elementwise) partial molar volume (approximation of first order volume derivative by a second-order finite difference formula)
         partialMolarVolumes={}
         for element in elementMolarAmounts:
@@ -111,13 +112,13 @@ class CoherentGibbsEnergy_OC(object):
             #print(element, modifiedElementMolarAmounts)
             oc.setElementMolarAmounts(modifiedElementMolarAmounts)
             oc.calculateEquilibrium(gmStat.Off)
-            volumePlus = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),constituentMassDensityLaws)
+            volumePlus = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),endmemberMassDensityLaws, constituentToEndmembersConverter)
             # evaluate volume for n[element]-epsilone
             modifiedElementMolarAmounts[element] -= 2.0*epsilon
             #print(element, modifiedElementMolarAmounts)
             oc.setElementMolarAmounts(modifiedElementMolarAmounts)
             oc.calculateEquilibrium(gmStat.Off)
-            volumeMinus = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),constituentMassDensityLaws)
+            volumeMinus = self.__calculateVolume(oc.getPhasesAtEquilibrium().getPhaseConstituentComposition(),oc.getConstituentsDescription(),endmemberMassDensityLaws, constituentToEndmembersConverter)
             partialMolarVolumes[element]=(volumePlus-volumeMinus)/(2.0*epsilon)
         # calculate approximate volume from partial volumes
         approxVolume = 0.0
@@ -125,7 +126,7 @@ class CoherentGibbsEnergy_OC(object):
             approxVolume+=molarAmount*partialMolarVolumes[element]
         return partialMolarVolumes,exactVolume,approxVolume
 
-    ## convert constituent molar fractions to mass fractions
+    ## convert endmember molar fractions to mass fractions
     def __convertConstituentMolarToMassFractions(self,constituentMolarFractions,constituentsDescription):
         constituentMassFractions=constituentMolarFractions.copy()
         tot=0.0
@@ -137,19 +138,24 @@ class CoherentGibbsEnergy_OC(object):
             constituentMassFractions[constituent] *= fac
         return constituentMassFractions
 
-    ## function to calculate molar volume from constituent
-    def __calculateVolume(self,phaseConstituentComposition,constituentsDescription,constituentMassDensityLaws):
-        #print(phaseConstituentComposition.keys())
+    ## function to calculate molar volume from endmember
+    def __calculateVolume(self,phaseConstituentComposition,constituentsDescription,endmemberMassDensityLaws, constituentToEndmembersConverter):
         if (len(phaseConstituentComposition) != 1):
             print('error: not a single phase (%s) at equilibrium for molar volume calculation' % list(phaseConstituentComposition.keys()))
             exit()
         constituentMolarFractions=phaseConstituentComposition[list(phaseConstituentComposition.keys())[0]]
         # mass fractions from molar fractions
-        constituentMassFractions=self.__convertConstituentMolarToMassFractions(constituentMolarFractions,constituentsDescription)
+        if (constituentToEndmembersConverter==None):
+            # endmembers are assumed to be the constituents (true if only one sublattice)
+            endmemberMassFractions=self.__convertConstituentMolarToMassFractions(constituentMolarFractions,constituentsDescription)
+        else:
+            # an external converter from constituent molar fractions to endmembers mass fractions is used
+            endmemberMassFractions=constituentToEndmembersConverter(constituentMolarFractions, constituentsDescription)
+        #print(endmemberMassFractions)
         # ideal mixing law to evaluate mixture density
         density=0.0
-        for constituent, massFraction in constituentMassFractions.items():
-            density += massFraction/constituentMassDensityLaws[constituent](self.__T)
+        for endmember, massFraction in endmemberMassFractions.items():
+            density += massFraction/endmemberMassDensityLaws[endmember](self.__T)
         density=1.0/density
         # total mass (mass is 'B' in OC)
         mass=oc.getScalarResult('B')

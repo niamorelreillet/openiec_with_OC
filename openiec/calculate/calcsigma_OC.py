@@ -14,7 +14,7 @@ import numpy as np
 from xarray import Dataset
 
 def SigmaCoherent_OC(
-    T, x0, db, comps, phasenames, purevms, intervms=[], limit=[0, 1.0], dx=0.01, enforceGridMinimizerForLocalEq=False
+    T, x0, db, comps, phasenames, purevms, limit=[0, 1.0], dx=0.01, enforceGridMinimizerForLocalEq=False, mueq=None
 ):
     """
     Calculate the coherent interfacial energy in alloys.
@@ -65,18 +65,15 @@ def SigmaCoherent_OC(
         # the molar volumes of pure components directly given as functions
         vmis = purevms
 
-    CoherentGibbsEnergy_OC.initOC(db, comps)
-    model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
 
     """Chemical potentials in two-phase equilibrium"""
-    #oc.raw().pytqtgsw(19) # set sparse grid for convergence issues
-    mueq = model.chemicalpotential(x0)
-    
-    CoherentGibbsEnergy_OC.initOC(db, comps)
-
-    CoherentGibbsEnergy_OC.initOC(db, comps)
+    if (mueq==None):
+        CoherentGibbsEnergy_OC.initOC(db, comps)
+        model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
+        mueq = model.chemicalpotential(x0)
 
     """Chemical potentials in two bulk phases"""
+    CoherentGibbsEnergy_OC.initOC(db, comps)
     model_phase = [
         CoherentGibbsEnergy_OC(T, 1E5, phasenames[i], False, enforceGridMinimizerForLocalEq) for i in range(len(phasenames))
     ]
@@ -89,7 +86,10 @@ def SigmaCoherent_OC(
     print(
         "\n******************************************************************************\nOpenIEC is looking for interfacial equilibirium coposition.\nFor more information visit https://github.com/openiec/openiec."
     )
-    x_s = SearchEquilibrium(sigma_model.objective, [limit] * cum, [dx] * cum)
+    limits = limit.copy()
+    if (type(limits[0])!=list):
+        limits = [limits] * cum
+    x_s = SearchEquilibrium(sigma_model.objective, limits, [dx] * cum)
     x_c = ComputeEquilibrium(sigma_model.objective, x_s["x"])
     print(
         "******************************************************************************\n\n"
