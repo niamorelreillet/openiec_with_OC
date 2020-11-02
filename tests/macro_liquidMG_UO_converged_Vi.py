@@ -30,9 +30,9 @@ def constituentToEndmembersConverter(constituentMolarFractions, constituentsDesc
 def run():
     print('### test U-O coherent interface in the liquid miscibility gap ###\n')
     # tdb filepath
-    #tdbFile=os.environ['TDBDATA_PRIVATE']+'/feouzr.tdb'
+    tdbFile=os.environ['TDBDATA_PRIVATE']+'/feouzr.tdb'
     #tdbFile=os.environ['TDBDATA_PRIVATE']+'/NUCLEA-17_1_mod.TDB'
-    tdbFile='tests/TAF_uzrofe_V10.TDB'
+    #tdbFile='tests/TAF_uzrofe_V10.TDB'
     # components
     comps = ['O', 'U']
     # mass density laws (from Barrachin2004)
@@ -55,86 +55,101 @@ def run():
     x0 = [0.65]
     # Composition step for searching initial interfacial equilibrium composition.
     dx = 0.05
+    # Convergence criterion for loop on interfacial composition
+    epsilonX = 1E-5
 
     # temperature range
     Tmin = 2800.0
     Tmax = 4400.0
     Trange = np.linspace(Tmin, Tmax, num=60, endpoint=True)
+    #Tmin = 2800.0
+    #Tmax = 2900.0
+    #Trange = np.linspace(Tmin, Tmax, num=3, endpoint=True)
     results = pd.DataFrame(columns=['temperature', 'n_phase1', 'n_phase2', 'xU_phase1', 'xU_phase2', 'xU_interface', 'sigma'])
 
     for T in Trange:
-        # Molar volumes of pure components evaluated at x0 and kept constant afterwards
-        CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
-        model = CoherentGibbsEnergy_OC(T, P, phasenames[0], False)
-        functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5, constituentToEndmembersConverter)
-        #functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5)
-
-        # calculate global equilibrium and retrieve associated chemical potentials
-        model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
-        mueq = model.chemicalpotential(x0)
-        phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
-        phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
-        if (len(phasesAtEquilibriumMolarAmounts)==1):
-            # it is possible that the miscibility gap has not been detected correctly (can happen when T increases)
-            #print(phasesAtEquilibriumMolarAmounts)
-            # ad hoc strategy: 1) calculate an equilibrium at lower temperature (hopefully finding the two phases)
-            #                  2) redo the calculation at the target temperature afterwards without the grid minimizer
-            model = CoherentGibbsEnergy_OC(T-300.0, 1E5, phasenames)
+            # calculate global equilibrium and retrieve associated chemical potentials
+            CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
+            model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
             mueq = model.chemicalpotential(x0)
             phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
             phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
-            #print(phasesAtEquilibriumMolarAmounts)
-            oc.setTemperature(T)
-            oc.calculateEquilibrium(gmStat.Off)
-            mueq = model.getChemicalPotentials()
-            phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
-            phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
+            if (len(phasesAtEquilibriumMolarAmounts)==1):
+                # it is possible that the miscibility gap has not been detected correctly (can happen when T increases)
+                #print(phasesAtEquilibriumMolarAmounts)
+                # ad hoc strategy: 1) calculate an equilibrium at lower temperature (hopefully finding the two phases)
+                #                  2) redo the calculation at the target temperature afterwards without the grid minimizer
+                model = CoherentGibbsEnergy_OC(T-300.0, 1E5, phasenames)
+                mueq = model.chemicalpotential(x0)
+                phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
+                phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
+                #print(phasesAtEquilibriumMolarAmounts)
+                oc.setTemperature(T)
+                oc.calculateEquilibrium(gmStat.Off)
+                mueq = model.getChemicalPotentials()
+                phasesAtEquilibrium = oc.getPhasesAtEquilibrium()
+                phasesAtEquilibriumMolarAmounts = phasesAtEquilibrium.getPhaseMolarAmounts()
+            phasesAtEquilibriumElementCompositions = phasesAtEquilibrium.getPhaseElementComposition()
+            print(phasesAtEquilibriumMolarAmounts)
+            if (set(phasesAtEquilibriumMolarAmounts)==set(['LIQUID#1', 'LIQUID_AUTO#2'])):
+                # Composition range for searching initial interfacial equilibrium composition
+                # calculated from the actual phase compositions
+                componentsWithLimits = comps[1:]
+                limit = [ [1.0, 0.0] for each in componentsWithLimits ]
+                for phase in phasesAtEquilibriumElementCompositions:
+                    for element in phasesAtEquilibriumElementCompositions[phase]:
+                        elementMolarFraction = phasesAtEquilibriumElementCompositions[phase][element]
+                        if element in componentsWithLimits:
+                            limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
+                            limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
+                limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
+                print('limits: ', limit)
 
-        phasesAtEquilibriumElementCompositions = phasesAtEquilibrium.getPhaseElementComposition()
-        print(phasesAtEquilibriumMolarAmounts)
-        if (set(phasesAtEquilibriumMolarAmounts)==set(['LIQUID#1', 'LIQUID_AUTO#2'])):
-            # Composition range for searching initial interfacial equilibrium composition
-            # calculated from the actual phase compositions
-            componentsWithLimits = comps[1:]
-            limit = [ [1.0, 0.0] for each in componentsWithLimits ]
-            for phase in phasesAtEquilibriumElementCompositions:
-                for element in phasesAtEquilibriumElementCompositions[phase]:
-                    elementMolarFraction = phasesAtEquilibriumElementCompositions[phase][element]
-                    if element in componentsWithLimits:
-                        limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
-                        limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
-            limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
-            print('limits: ', limit)
-            # calculate interfacial energy
-            sigma = SigmaCoherent_OC(
-                T=T,
-                x0=x0,
-                db=tdbFile,
-                comps=comps,
-                phasenames=phasenames,
-                purevms=functions,
-                limit=limit,
-                dx=dx,
-                enforceGridMinimizerForLocalEq=False,
-                mueq=mueq
-            )
-            print('at T=', T, ' sigma=', sigma.Interfacial_Energy.values, '\n')
-            if (np.abs(sigma.Interfacial_Energy.values)>1E-6):
-                # store results in pandas dataframe
-                results = results.append({'temperature' : T,
-                                        'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID#1'],
-                                        'n_phase2' : phasesAtEquilibriumMolarAmounts['LIQUID_AUTO#2'],
-                                        'xU_phase1' : phasesAtEquilibriumElementCompositions['LIQUID#1']['U'],
-                                        'xU_phase2' : phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2']['U'],
-                                        'xU_interface' : sigma.Interfacial_Composition.values[1],
-                                        'sigma' : sigma.Interfacial_Energy.values,
-                                        },
-                        ignore_index = True)
+                notConverged = True
+                x = x0.copy()
+                # Iterate on interfacial molar composition
+                while (notConverged):
+                    # Molar volumes of pure components evaluated at x
+                    CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
+                    model = CoherentGibbsEnergy_OC(T, P, phasenames[0], False)
+                    if ('TAF' in tdbFile):
+                        functions=model.constantPartialMolarVolumeFunctions(x, constituentDensityLaws, 1E-5, constituentToEndmembersConverter)
+                    else:
+                        functions=model.constantPartialMolarVolumeFunctions(x, constituentDensityLaws, 1E-5)
+                    # calculate interfacial energy
+                    sigma = SigmaCoherent_OC(
+                        T=T,
+                        x0=x,
+                        db=tdbFile,
+                        comps=comps,
+                        phasenames=phasenames,
+                        purevms=functions,
+                        limit=limit,
+                        dx=dx,
+                        enforceGridMinimizerForLocalEq=False,
+                        mueq=mueq
+                    )
+                    print('at T=', T, ' sigma=', sigma.Interfacial_Energy.values, '\n')
+                    notConverged = np.abs(x[0]-sigma.Interfacial_Composition.values[1])>epsilonX
+                    print('convergence: ', not notConverged, x[0], sigma.Interfacial_Composition.values[1])
+                    x[0]=sigma.Interfacial_Composition.values[1]
+                # Store result
+                if (np.abs(sigma.Interfacial_Energy.values)>1E-6):
+                    # store results in pandas dataframe
+                    results = results.append({'temperature' : T,
+                                            'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID#1'],
+                                            'n_phase2' : phasesAtEquilibriumMolarAmounts['LIQUID_AUTO#2'],
+                                            'xU_phase1' : phasesAtEquilibriumElementCompositions['LIQUID#1']['U'],
+                                            'xU_phase2' : phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2']['U'],
+                                            'xU_interface' : sigma.Interfacial_Composition.values[1],
+                                            'sigma' : sigma.Interfacial_Energy.values,
+                                            },
+                            ignore_index = True)
+                else:
+                    raise ValueError('wrong value discarded')
             else:
-                raise ValueError('wrong value discarded')
-        else:
-            print('at T=', T, ' out of the miscibility gap')
-        print('phases at equilibrium:', phasesAtEquilibriumMolarAmounts)
+                print('at T=', T, ' out of the miscibility gap')
+            print('phases at equilibrium:', phasesAtEquilibriumMolarAmounts)
     # write csv result file
     results.to_csv('macro_liquidMG_UO_run.csv')
 
