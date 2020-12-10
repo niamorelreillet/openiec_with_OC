@@ -19,7 +19,7 @@ def constituentToEndmembersConverter(constituentMolarFractions, constituentsDesc
     endmemberMolarMasses = {
         'U1'   : constituentsDescription['U+4']['mass'],
         'O1'   : constituentsDescription['O']['mass'],
-        'O2U1' : constituentsDescription['U+4']['mass']+2.0*constituentsDescription['U+4']['mass']
+        'O2U1' : constituentsDescription['U+4']['mass']+2.0*constituentsDescription['O']['mass']
     }
     endMemberMassFractions = {k : endmemberMolarFractions[k]*endmemberMolarMasses[k] for k in endmemberMolarFractions}
     factor=1.0/sum(endMemberMassFractions.values())
@@ -30,9 +30,9 @@ def constituentToEndmembersConverter(constituentMolarFractions, constituentsDesc
 def run():
     print('### test U-O coherent interface in the liquid miscibility gap ###\n')
     # tdb filepath
-    tdbFile=os.environ['TDBDATA_PRIVATE']+'/feouzr.tdb'
+    #tdbFile=os.environ['TDBDATA_PRIVATE']+'/feouzr.tdb'
     #tdbFile=os.environ['TDBDATA_PRIVATE']+'/NUCLEA-17_1_mod.TDB'
-    #tdbFile='tests/TAF_uzrofe_V10.TDB'
+    tdbFile='tests/TAF_uzrofe_V10.TDB'
     # components
     comps = ['O', 'U']
     # mass density laws (from Barrachin2004)
@@ -66,8 +66,8 @@ def run():
         # Molar volumes of pure components evaluated at x0 and kept constant afterwards
         CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
         model = CoherentGibbsEnergy_OC(T, P, phasenames[0], False)
-        #functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5, constituentToEndmembersConverter)
-        functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5)
+        functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5, constituentToEndmembersConverter)
+        #functions=model.constantPartialMolarVolumeFunctions(x0, constituentDensityLaws, 1E-5)
 
         # calculate global equilibrium and retrieve associated chemical potentials
         model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
@@ -131,8 +131,7 @@ def run():
                                         },
                         ignore_index = True)
             else:
-                print('wrong value discarded')
-                raise ValueError("")
+                raise ValueError('wrong value discarded')
         else:
             print('at T=', T, ' out of the miscibility gap')
         print('phases at equilibrium:', phasesAtEquilibriumMolarAmounts)
