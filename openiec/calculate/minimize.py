@@ -18,7 +18,7 @@ def SearchEquilibrium(objectfunction, limit, dx):
     objectfunction: function
         The function of calculating partial interfacial energies of components.
     limit: list
-        The composition range of the searched interfacial composition. 
+        The composition range of the searched interfacial composition.
         The composition range usually dosen't exceed maximum composition range of two-phase region.
     dx: float
         The step of searching initial interfacial equilibrium composition.
@@ -32,7 +32,15 @@ def SearchEquilibrium(objectfunction, limit, dx):
             xs[i][j] = (limit[j][1] - limit[j][0]) * p[j] + limit[j][0]
 
     cons = lambda ys: reduce(lambda x, y: x + y, ys) < 1.0
-    xs = [each for each in xs if cons(each)]
+    tmp = [each for each in xs if cons(each)]
+    # remove duplicates (in a very inefficient way...)
+    xs = [tmp.pop(0), ]
+    for value in tmp:
+        if (np.linalg.norm(np.array(xs[-1]) - np.array(value), np.inf) < 1E-5):
+            continue
+        xs.append(value)
+    #print(len(xs))
+    #print(xs)
 
     vs = [objectfunction(x) for x in xs]
 

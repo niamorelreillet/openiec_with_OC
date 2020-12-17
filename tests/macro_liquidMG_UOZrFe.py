@@ -62,12 +62,12 @@ def run():
     P = 1E5
      # inputs = pd.read_csv('uzrofe.csv')
     # pd.read_csv('uzrofe.csv', usecols= ['RUZr','CZr','xSteel','xU','xZr','xO','xFe']
-    # 0.60	0.30	0.10	1.550142e-01 	2.583569e-01 	4.650425e-01	 1.215864e-01
+    # 0.60  0.30    0.10    1.550142e-01    2.583569e-01    4.650425e-01     1.215864e-01
     # Given initial alloy composition. x0 is the mole fractions of U, Zr, Fe.
     # RU/Zr=0.60 CZr=0.3 xSteel=0.1
     x0 = [0.1550142, 0.2583569, 0.1215864]
     # Composition step for searching initial interfacial equilibrium composition.
-    dx = 0.1
+    dx = 0.5
      # Convergence criterion for loop on interfacial composition
     epsilonX = 1E-5
 
@@ -114,11 +114,11 @@ def run():
                         if element in componentsWithLimits:
                             limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
                             limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
-                limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
+                limit = [ [each[0]+dx*(each[1]-each[0]), each[1]-dx*(each[1]-each[0])] for each in limit ]
                 print('limits: ', limit)
 
                 notConverged = True
-                x = x0.copy()
+                x = [ 0.5*(phasesAtEquilibriumElementCompositions['LIQUID#1'][comp] + phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2'][comp]) for comp in componentsWithLimits ]
                 # Iterate on interfacial molar composition
                 while (notConverged):
                     # Molar volumes of pure components evaluated at x
@@ -142,11 +142,14 @@ def run():
                         mueq=mueq
                         )
                     print('at T=', T, ' sigma=', sigma.Interfacial_Energy.values, '\n')
-                    notConverged = np.abs(x[0]-sigma.Interfacial_Composition.values[1])>epsilonX
-                    print('convergence: ', not notConverged, x[0], sigma.Interfacial_Composition.values[1])
-                    x[0]=sigma.Interfacial_Composition.values[1]
+                    notConverged = np.linalg.norm(x[:]-sigma.Interfacial_Composition.values[1:], np.inf)>epsilonX
+                    print('convergence: ', not notConverged, x[:], sigma.Interfacial_Composition.values[1:])
+                    x[:]=sigma.Interfacial_Composition.values[1:]
                 # store results in pandas dataframe
                 if (np.abs(sigma.Interfacial_Energy.values)>1E-6):
+                    print(sigma, "\n")
+                    if (abs(np.max(sigma.Partial_Interfacial_Energy.values)-np.min(sigma.Partial_Interfacial_Energy.values))>1E-5):
+                        raise ValueError('wrong value discarded')
                     results = results.append({'temperature' : T,
                                               'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID#1'],
                                               'n_phase2' : phasesAtEquilibriumMolarAmounts['LIQUID_AUTO#2'],
@@ -167,13 +170,14 @@ def run():
                                               },
                             ignore_index = True)
                 else:
+                    print(sigma, "\n")
                     raise ValueError('wrong value discarded')
             else:
                 print('at T=', T, ' out of the miscibility gap')
             print('phases at equilibrium:', phasesAtEquilibriumMolarAmounts)
     # write csv result file
     results.to_csv('macro_liquidMG_UOZrFe_run.csv')
-    
+
 def run2():
     print('### test U-O coherent interface in the liquid miscibility gap ###\n')
     # tdb filepath
@@ -196,24 +200,24 @@ def run2():
         'FE1O1'  : lambda T: 7030 - 0.88*(T-1808), # set to Fe value but ok as, almost no such component in the considered mixtures
         'FE1O1_5'  : lambda T: 7030 - 0.88*(T-1808), # set to Fe value but ok as, almost no such component in the considered mixtures
     }
-    
+
     constituentDensityLaws['U'] = constituentDensityLaws['U1']
     constituentDensityLaws['ZR'] = constituentDensityLaws['ZR1']
     constituentDensityLaws['O'] = constituentDensityLaws['O1']
     constituentDensityLaws['FE'] = constituentDensityLaws['FE1']
-    
+
     # phase names
     phasenames = ['LIQUID', 'LIQUID']
     # pressure
     P = 1E5
      # inputs = pd.read_csv('uzrofe.csv')
     # pd.read_csv('uzrofe.csv', usecols= ['RUZr','CZr','xSteel','xU','xZr','xO','xFe']
-    # 0.60	0.30	0.10	1.550142e-01 	2.583569e-01 	4.650425e-01	 1.215864e-01
+    # 0.60  0.30    0.10    1.550142e-01    2.583569e-01    4.650425e-01     1.215864e-01
     # Given initial alloy composition. x0 is the mole fractions of U, Zr, Fe.
     # RU/Zr=0.60 CZr=0.3 xSteel=0.1
     x0 = [0.1550142, 0.2583569, 0.1215864]
     # Composition step for searching initial interfacial equilibrium composition.
-    dx = 0.01
+    dx = 0.5
      # Convergence criterion for loop on interfacial composition
     epsilonX = 1E-5
 
@@ -259,10 +263,9 @@ def run2():
                         if element in componentsWithLimits:
                             limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
                             limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
-                limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
+                limit = [ [each[0]+dx*(each[1]-each[0]), each[1]-dx*(each[1]-each[0])] for each in limit ]
                 print('limits: ', limit)
 
-                notConverged = True
                 x = x0.copy()
                 # Molar volumes of pure components evaluated at x
                 functions = [ lambda _: inputs['VmO'][i], lambda _: inputs['VmU'][i], lambda _: inputs['VmZr'][i], lambda _: inputs['VmFe'][i]]
@@ -283,6 +286,7 @@ def run2():
                 # Store result
                 if (np.abs(sigma.Interfacial_Energy.values)>1E-6):
                     # store results in pandas dataframe
+                    print(sigma, "\n")
                     results = results.append({'temperature' : T,
                                               'n_phase1' : phasesAtEquilibriumMolarAmounts['LIQUID#1'],
                                               'n_phase2' : phasesAtEquilibriumMolarAmounts['LIQUID_AUTO#2'],
@@ -302,6 +306,7 @@ def run2():
                                             },
                             ignore_index = True)
                 else:
+                    print(sigma, "\n")
                     raise ValueError('wrong value discarded')
             else:
                 print('at T=', T, ' out of the miscibility gap')
@@ -310,7 +315,7 @@ def run2():
     results.to_csv('macro_liquidMG_UOZrFe_run2.csv')
 
 def fit():
-    results = pd.read_csv('macro_liquidMG_UOZrFe_run2.csv')
+    results = pd.read_csv('macro_liquidMG_UOZrFe_run.csv')
     # Function to calculate the power-law with constants sigma0, Tc, mu, sigmaC
     def power_law_plus_const(T, sigma0, Tc, mu, sigmaC):
         return sigma0*np.power(1.0-T/Tc, mu)+sigmaC
@@ -339,26 +344,23 @@ def fit():
     ax.set_xlabel('temperature T (K)',fontsize=12)
     ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)
     ax.legend(loc='upper right')
-    
+
+    # Plots associated with composition
     ax = axes[0,1]
     ax.grid(True)
-    ax.plot(results['temperature'], res, marker = 'o', ls='', color='tab:cyan')
-    ax.set_xlabel('temperature T (K)',fontsize=12)
-    ax.set_ylabel('fit residuals $\sigma_{fit} - \sigma_{calculated}$ (N.m$^{-1}$)',fontsize=12)
-    ax.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
-    # Plots associated with composition
-    ax = axes[1,0]
-    ax.plot(results['xU_phase1'], results['temperature'], marker = '', ls='-', color='tab:red', label='bulk liquid 1')
-    ax.plot(results['xU_phase2'], results['temperature'], marker = '', ls='-', color='tab:green', label='bulk liquid 2')
-    ax.plot(results['xU_interface'], results['temperature'], marker = '', ls='-', color='tab:cyan', label='interface')
-    ax.set_ylabel('temperature T (K)',fontsize=12)
-    ax.set_xlabel('U molar fraction',fontsize=12)
-    ax.legend(loc='upper right')
-    
-    ax = axes[1,1]
     ax.plot(results['xU_interface'], results['sigma'], marker = 'o', ls='--', color='tab:cyan')
     ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)
     ax.set_xlabel('interface U molar fraction',fontsize=12)
+    ax = axes[1,0]
+    ax.grid(True)
+    ax.plot(results['xZr_interface'], results['sigma'], marker = 'o', ls='--', color='tab:cyan')
+    ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)
+    ax.set_xlabel('interface Zr molar fraction',fontsize=12)
+    ax = axes[1,1]
+    ax.grid(True)
+    ax.plot(results['xFe_interface'], results['sigma'], marker = 'o', ls='--', color='tab:cyan')
+    ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)
+    ax.set_xlabel('interface Fe molar fraction',fontsize=12)
 
     plt.savefig('macro_liquidMG_UOZrFe_fit.pdf')
     plt.show()
@@ -366,4 +368,4 @@ def fit():
 if __name__ == '__main__':
     run()
     run2()
-    #fit()
+    fit()

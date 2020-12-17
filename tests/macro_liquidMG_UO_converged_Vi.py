@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 import os
+from matplotlib.ticker import ScalarFormatter
 from openiec.property.coherentenergy_OC import CoherentGibbsEnergy_OC
 from openiec.calculate.calcsigma_OC import SigmaCoherent_OC
 from pyOC import opencalphad as oc
@@ -34,6 +34,7 @@ def run():
     #tdbFile=os.environ['TDBDATA_PRIVATE']+'/NUCLEA-17_1_mod.TDB'
     #tdbFile=os.environ['TDBDATA_PRIVATE']+'/NUCLEA-19_1_mod.TDB'
     #tdbFile='tests/TAF_uzrofe_V10.TDB'
+    #tdbFile='tests/TAF_uzrofe_V10_only_liquid_UO.TDB'
     # components
     comps = ['O', 'U']
     # mass density laws (from Barrachin2004)
@@ -103,7 +104,7 @@ def run():
                         if element in componentsWithLimits:
                             limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
                             limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
-                limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
+                limit = [ [each[0]+dx*(each[1]-each[0]), each[1]-dx*(each[1]-each[0])] for each in limit ]
                 print('limits: ', limit)
 
                 notConverged = True
@@ -185,7 +186,7 @@ def run2():
     # Given initial alloy composition. x0 is the mole fraction of U.
     x0 = [0.65]
     # Composition step for searching initial interfacial equilibrium composition.
-    dx = 0.05
+    dx = 0.1
     # Convergence criterion for loop on interfacial composition
     epsilonX = 1E-5
 
@@ -227,7 +228,7 @@ def run2():
                         if element in componentsWithLimits:
                             limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
                             limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
-                limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
+                limit = [ [each[0]+dx*(each[1]-each[0]), each[1]-dx*(each[1]-each[0])] for each in limit ]
                 print('limits: ', limit)
 
                 notConverged = True
@@ -271,7 +272,7 @@ def run2():
     results.to_csv('macro_liquidMG_UO_run2.csv')
 
 def fit():
-    results = pd.read_csv('macro_liquidMG_UO_run2.csv')
+    results = pd.read_csv('macro_liquidMG_UO_run.csv')
     # Function to calculate the power-law with constants sigma0, Tc, mu, sigmaC
     def power_law_plus_const(T, sigma0, Tc, mu, sigmaC):
         return sigma0*np.power(1.0-T/Tc, mu)+sigmaC
@@ -322,7 +323,167 @@ def fit():
     plt.savefig('macro_liquidMG_UO_fit.pdf')
     plt.show()
 
+def calculateChemicalPotentialsAndMolarVolumes(tdbFile, suffix):
+    print('### calculate U-O chemical potentials ###\n')
+    # components
+    comps = ['O', 'U']
+    # mass density laws (from Barrachin2004)
+    constituentDensityLaws = {
+        'U1'   : lambda T: 17270.0-1.358*(T-1408),
+        'ZR1'  : lambda T: 6844.51-0.609898*T+2.05008E-4*T**2-4.47829E-8*T**3+3.26469E-12*T**4,
+        'O2U1' : lambda T: 8860.0-9.285E-1*(T-3120),
+        'O2ZR1': lambda T: 5150-0.445*(T-2983),
+        'O1'   : lambda T: 1.141 # set to meaningless value but ok as, no 'free' oxygen in the considered mixtures
+    }
+    constituentDensityLaws['U'] = constituentDensityLaws['U1']
+    constituentDensityLaws['ZR'] = constituentDensityLaws['ZR1']
+    constituentDensityLaws['O'] = constituentDensityLaws['O1']
+
+    # phase names
+    phasenames = ['LIQUID', 'LIQUID']
+    # pressure
+    P = 1E5
+    # temperature
+    T= 2800
+    # composition range (mole fraction of U)
+    xmin = 0.4
+    xmax = 0.99
+    xRange = np.linspace(xmin, xmax, num=60, endpoint=True)
+
+    results = pd.DataFrame(columns=['xU', 'muU', 'muO', 'VmU', 'VmO', 'mueqU', 'mueqO'])
+
+    # calculate global equilibrium and retrieve associated chemical potentials
+    CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
+    model = CoherentGibbsEnergy_OC(T, 1E5, phasenames)
+    mueq = model.chemicalpotential([0.5*(xmin+xmax)])
+
+    # calculate single-phase equilibrium and retrieve associated chemical potentials
+    CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
+    model = CoherentGibbsEnergy_OC(T, 1E5, phasenames[0])
+    for x in xRange:
+        print('**** xU=',x)
+        mu = model.chemicalpotential([x])
+        gibbsEnergy = oc.getScalarResult('G')/oc.getScalarResult('N')
+        if ('TAF' in tdbFile):
+            functions=model.constantPartialMolarVolumeFunctions([x], constituentDensityLaws, 1E-5, constituentToEndmembersConverter)
+        else:
+            functions=model.constantPartialMolarVolumeFunctions([x], constituentDensityLaws, 1E-5)
+        results = results.append({'xU' : x,
+                                  'muU' : mu[1],
+                                  'muO' : mu[0],
+                                  'VmU' : functions[1](T),
+                                  'VmO' : functions[0](T),
+                                  'mueqU' : mueq[1],
+                                  'mueqO' : mueq[0],
+                                  'Gm' : gibbsEnergy
+                                  },
+                  ignore_index = True)
+    # write csv result file
+    results.to_csv('macro_liquidMG_UO_chemicalPotentialsAndMolarVolumes'+suffix+'.csv')
+
+def plotChemicalPotentialsAndMolarVolumes():
+    resultsN = pd.read_csv('macro_liquidMG_UO_chemicalPotentialsAndMolarVolumes_NUCLEA.csv')
+    resultsT = pd.read_csv('macro_liquidMG_UO_chemicalPotentialsAndMolarVolumes_TAFID.csv')
+    #
+    class ScalarFormatterForceFormat(ScalarFormatter):
+        def _set_format(self):  # Override function that finds format to use.
+            self.format = "%4.3f"  # Give format here
+    yfmt = ScalarFormatterForceFormat()
+    yfmt.set_powerlimits((0,0))
+
+    # chemical potentials
+    plt.rcParams['figure.figsize'] = (14,6)
+    fig,axes=plt.subplots(1,2,constrained_layout=True)
+    ax = axes[0]
+    ax.grid(True)
+    ax.plot(resultsN['xU'], resultsN['muU'], marker = '', ls='-', color='tab:cyan', label='$\mu_U(x_U)$ - NUCLEA')
+    ax.plot(resultsT['xU'], resultsT['muU'], marker = '', ls='-', color='tab:red', label='$\mu_U(x_U)$ - TAF-ID')
+    ax.plot(resultsN['xU'], resultsN['mueqU'], marker = '', ls='--', color='tab:cyan', label='$\mu_U^{eq,MG}$ - NUCLEA')
+    ax.plot(resultsT['xU'], resultsT['mueqU'], marker = '', ls='--', color='tab:red', label='$\mu_U^{eq,MG}$ - TAF-ID')
+    ax.set_xlabel('$x_U$',fontsize=12)
+    ax.set_ylabel('chemical potential (J.mol$^{-1}$)',fontsize=12)
+    ax.autoscale(enable=True, axis='x', tight=True)
+    #ax.autoscale(enable=True, axis='y', tight=True)
+    ax.legend(loc='best')
+    ax = axes[1]
+    ax.grid(True)
+    ax.plot(resultsN['xU'], resultsN['muO'], marker = '', ls='-', color='tab:cyan', label='$\mu_O(x_U)$ - NUCLEA')
+    ax.plot(resultsT['xU'], resultsT['muO'], marker = '', ls='-', color='tab:red', label='$\mu_O(x_U)$ - TAF-ID')
+    ax.plot(resultsN['xU'], resultsN['mueqO'], marker = '', ls='--', color='tab:cyan', label='$\mu_O^{eq,MG}$ - NUCLEA')
+    ax.plot(resultsT['xU'], resultsT['mueqO'], marker = '', ls='--', color='tab:red', label='$\mu_O^{eq,MG}$ - TAF-ID')
+    ax.set_xlabel('$x_U$',fontsize=12)
+    ax.set_ylabel('chemical potential (J.mol$^{-1}$)',fontsize=12)
+    ax.autoscale(enable=True, axis='x', tight=True)
+    #ax.autoscale(enable=True, axis='y', tight=True)
+    ax.legend(loc='best')
+    plt.savefig('macro_liquidMG_UO_chemicalPotentials.pdf')
+    plt.savefig('macro_liquidMG_UO_chemicalPotentials.png')
+
+    # Gibbs energy
+    plt.rcParams['figure.figsize'] = (7,7)
+    fig,axes=plt.subplots(1,1,constrained_layout=True)
+    ax = axes
+    ax.grid(True)
+    ax.plot(resultsN['xU'], resultsN['Gm'], marker = '', ls='-', color='tab:cyan', label='$G_m(x_U)$ - NUCLEA')
+    ax.plot(resultsT['xU'], resultsT['Gm'], marker = '', ls='-', color='tab:red', label='$G_m(x_U)$ - TAF-ID')
+    ax.set_xlabel('$x_U$',fontsize=12)
+    ax.set_ylabel('Gibbs energy (J.mol$^{-1}$)',fontsize=12)
+    ax.autoscale(enable=True, axis='x', tight=True)
+    #ax.autoscale(enable=True, axis='y', tight=True)
+    ax.legend(loc='best')
+    plt.savefig('macro_liquidMG_UO_gibbsEnergy.pdf')
+    plt.savefig('macro_liquidMG_UO_gibbsEnergy.png')
+
+    # partial molar volumes
+    resultsN2 = resultsN[(resultsN['xU']>=0.5) & (resultsN['xU']<=0.8)]
+    resultsT2 = resultsT[(resultsT['xU']>=0.5) & (resultsT['xU']<=0.8)]
+    plt.rcParams['figure.figsize'] = (14,6)
+    fig,axes=plt.subplots(1,2,constrained_layout=True)
+    ax = axes[0]
+    ax.grid(True)
+    color = 'tab:cyan'
+    ax.plot(resultsN2['xU'], resultsN2['VmU']*1E5, marker = '', ls='-', color=color)
+    ax.set_xlabel('$x_U$',fontsize=12)
+    ax.set_ylabel('$V_U(x_U)$ ($10^{-5}$ m$^3$.mol$^{-1}$) - NUCLEA',fontsize=12, color=color)
+    ax.tick_params(axis='y', labelcolor=color)
+    ax.autoscale(enable=True, axis='y', tight=True)
+    ax.ticklabel_format(axis='y', style='plain', useOffset=False)
+    ax2 = ax.twinx()
+    color = 'tab:red'
+    ax2.plot(resultsT2['xU'], resultsT2['VmU']*1E5, marker = '', ls='-', color=color)
+    ax2.set_ylabel('$V_U(x_U)$ ($10^{-5}$ m$^3$.mol$^{-1}$) - TAF-ID',fontsize=12, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+    ax2.autoscale(enable=True, axis='y', tight=True)
+    ax2.ticklabel_format(axis='y', style='plain', useOffset=False)
+
+    ax = axes[1]
+    ax.grid(True)
+    color = 'tab:cyan'
+    ax.plot(resultsN2['xU'], resultsN2['VmO']*1E5, marker = '', ls='-', color=color)
+    ax.set_xlabel('$x_U$',fontsize=12)
+    ax.set_ylabel('$V_O(x_U)$ ($10^{-5}$ m$^3$.mol$^{-1}$) - NUCLEA',fontsize=12, color=color)
+    ax.tick_params(axis='y', labelcolor=color)
+    ax.autoscale(enable=True, axis='y', tight=True)
+    ax.ticklabel_format(axis='y', style='plain', useOffset=False)
+    ax2 = ax.twinx()
+    color = 'tab:red'
+    ax2.plot(resultsT2['xU'], resultsT2['VmO']*1E5, marker = '', ls='-', color=color)
+    ax2.set_ylabel('$V_O(x_U)$ ($10^{-5}$ m$^3$.mol$^{-1}$) - TAF-ID',fontsize=12, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+    ax2.autoscale(enable=True, axis='y', tight=True)
+    ax2.ticklabel_format(axis='y', style='plain', useOffset=False)
+
+    plt.savefig('macro_liquidMG_UO_molarVolumes.pdf')
+    plt.savefig('macro_liquidMG_UO_molarVolumes.png')
+    plt.show()
+
+
 if __name__ == '__main__':
+    #####
     run()
     run2()
     fit()
+    #####
+    #calculateChemicalPotentialsAndMolarVolumes(os.environ['TDBDATA_PRIVATE']+'/feouzr.tdb', '_NUCLEA')
+    #calculateChemicalPotentialsAndMolarVolumes('tests/TAF_uzrofe_V10.TDB', '_TAFID')
+    #plotChemicalPotentialsAndMolarVolumes()

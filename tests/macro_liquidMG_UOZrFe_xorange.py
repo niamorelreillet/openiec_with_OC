@@ -64,12 +64,13 @@ def run():
     # pd.read_csv('uzrofe.csv', usecols= ['RUZr','CZr','xSteel','xU','xZr','xO','xFe']
     # Given initial alloy composition. x0 is the mole fractions of U, Zr, Fe.
     # RU/Zr=0.60 CZr=0.3 xSteel=0.1
-    read = pd.read_csv('/home/kg245220/code/openiec_with_OC/1.4RUZr.csv')
+    read = pd.read_csv('tests/1.4RUZr.csv', delim_whitespace=True)
+    print(read)
     # x0 = [results1['xU'], results1['xZr'], results1['xFe']]
     # Composition step for searching initial interfacial equilibrium composition.
-    dx = 0.1
-     # Convergence criterion for loop on interfacial composition
-    epsilonX = 1E-5
+    dx = 0.5
+    # Convergence criterion for loop on interfacial composition
+    epsilonX = 1E-4
 
     # temperature range
     T = 2900
@@ -78,7 +79,7 @@ def run():
 
     for ii in range(read.shape[0]):
             x0=[read['xU'][ii],read['xZr'][ii],read['xFe'][ii]]
-            print("x0: ",x0)
+            print("********************\n x0: ",x0)
             # calculate global equilibrium and retrieve associated chemical potentials
             CoherentGibbsEnergy_OC.initOC(tdbFile, comps)
             oc.raw().pytqtgsw(4) # no merging of grid points
@@ -115,11 +116,11 @@ def run():
                         if element in componentsWithLimits:
                             limit[componentsWithLimits.index(element)][0] = min(limit[componentsWithLimits.index(element)][0], elementMolarFraction)
                             limit[componentsWithLimits.index(element)][1] = max(limit[componentsWithLimits.index(element)][1], elementMolarFraction)
-                limit = [ [each[0]+dx, each[1]-dx] for each in limit ]
+                limit = [ [each[0]+dx*(each[1]-each[0]), each[1]-dx*(each[1]-each[0])] for each in limit ]
                 print('limits: ', limit)
 
                 notConverged = True
-                x = x0.copy()
+                x = [ 0.5*(phasesAtEquilibriumElementCompositions['LIQUID#1'][comp] + phasesAtEquilibriumElementCompositions['LIQUID_AUTO#2'][comp]) for comp in componentsWithLimits ]
                 # Iterate on interfacial molar composition
                 while (notConverged):
                     # Molar volumes of pure components evaluated at x
@@ -143,9 +144,9 @@ def run():
                         mueq=mueq
                         )
                     print('at T=', T, ' sigma=', sigma.Interfacial_Energy.values, '\n')
-                    notConverged = np.abs(x[0]-sigma.Interfacial_Composition.values[1])>epsilonX
-                    print('convergence: ', not notConverged, x[0], sigma.Interfacial_Composition.values[1])
-                    x[0]=sigma.Interfacial_Composition.values[1]
+                    notConverged = np.linalg.norm(x[:]-sigma.Interfacial_Composition.values[1:], np.inf)>epsilonX
+                    print('convergence: ', not notConverged, x[:], sigma.Interfacial_Composition.values[1:])
+                    x[:]=sigma.Interfacial_Composition.values[1:]
                 # store results in pandas dataframe
                 if (np.abs(sigma.Interfacial_Energy.values)>1E-5):
                     results = results.append({'temperature' : T,
@@ -205,7 +206,7 @@ def fit():
     ax.set_xlabel('temperature T (K)',fontsize=12)
     ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)
     ax.legend(loc='upper right')
-    
+
     ax = axes[0,1]
     ax.grid(True)
     ax.plot(results['temperature'], res, marker = 'o', ls='', color='tab:cyan')
@@ -220,7 +221,7 @@ def fit():
     ax.set_ylabel('temperature T (K)',fontsize=12)
     ax.set_xlabel('U molar fraction',fontsize=12)
     ax.legend(loc='upper right')
-    
+
     ax = axes[1,1]
     ax.plot(results['xU_interface'], results['sigma'], marker = 'o', ls='--', color='tab:cyan')
     ax.set_ylabel('interfacial energy $\sigma$ (N.m$^{-1}$)',fontsize=12)

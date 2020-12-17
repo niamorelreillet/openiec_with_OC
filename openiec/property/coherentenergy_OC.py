@@ -85,8 +85,11 @@ class CoherentGibbsEnergy_OC(object):
         volumeError=(approxVolume/exactVolume-1.0)*100.0
         print(partialMolarVolumes)
         print(volumeError,approxVolume,exactVolume)
-        if (abs(volumeError)>1E-1):
-            raise RuntimeError('volume error is too high')
+        if (abs(volumeError)>1.0):
+            if (epsilon>1E-10):
+                return self.constantPartialMolarVolumeFunctions(x, endmemberMassDensityLaws, epsilon*0.1, constituentToEndmembersConverter)
+            else:
+                raise RuntimeError('volume error is too high')
         return [ (lambda comp : lambda _: partialMolarVolumes[comp])(comp) for comp in self.__comps if comp != 'VA' ]
 
     ## evaluate partial molar volumes by an approximation of the first order volume derivative by a second-order finite difference formula
