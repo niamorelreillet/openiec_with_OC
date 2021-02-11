@@ -121,7 +121,7 @@ def run():
                     # calculate interfacial energy
                     sigma = SigmaCoherent_OC(
                         T=T,
-                        x0=x,
+                        x0=x0,
                         db=tdbFile,
                         comps=comps,
                         phasenames=phasenames,
@@ -238,7 +238,7 @@ def run2():
                 # calculate interfacial energy
                 sigma = SigmaCoherent_OC(
                     T=T,
-                    x0=x,
+                    x0=x0,
                     db=tdbFile,
                     comps=comps,
                     phasenames=phasenames,

@@ -9,7 +9,7 @@ import numpy as np
 from functools import reduce
 
 
-def SearchEquilibrium(objectfunction, limit, dx):
+def SearchEquilibrium(objectfunction, limit, dx, bulkX=None):
     """
     Search initial values of the nonlinear optimization.
 
@@ -33,6 +33,16 @@ def SearchEquilibrium(objectfunction, limit, dx):
 
     cons = lambda ys: reduce(lambda x, y: x + y, ys) < 1.0
     tmp = [each for each in xs if cons(each)]
+    if (bulkX != None):
+        def cons2(x):
+            sum1=0.0
+            sum2=0.0
+            for i in range(xn):
+                sum1 += (x[i]-bulkX[i][0])**2
+                sum2 += (x[i]-bulkX[i][1])**2
+            return min(sum1,sum2)>1E-4
+        # avoid values too close to the bulk phase compositions
+        tmp = [each for each in tmp if cons2(each)]
     # remove duplicates (in a very inefficient way...)
     xs = [tmp.pop(0), ]
     for value in tmp:
@@ -48,6 +58,17 @@ def SearchEquilibrium(objectfunction, limit, dx):
 
     return {"index": index, "x": xs[index], "vmin": vs[index]}
 
+def SearchEquilibriumAlongLine(objectfunction, limit, dx):
+    alpha = np.linspace(0.0, 1.0, int(1.0/dx))
+    pn, xn = len(alpha), len(limit)
+    xs = []
+    for i in range(pn):
+        p = alpha[i]
+        xs.append([ (limit[j][1] - limit[j][0]) * p + limit[j][0] for j in range(xn) ])
+    #print(xs)
+    vs = [objectfunction(x) for x in xs]
+    index = np.argmin(vs)
+    return {"index": index, "x": xs[index], "vmin": vs[index]}
 
 def ComputeEquilibrium(objectfunction, x0, method="Nelder-Mead", tol=1e-10):
     """
@@ -67,6 +88,7 @@ def ComputeEquilibrium(objectfunction, x0, method="Nelder-Mead", tol=1e-10):
         Tolerance for termination. For detailed control, use solver-specific options.
     """
 
-    res = minimize(objectfunction, x0, method=method, tol=tol)
+    res = minimize(objectfunction, x0, method=method, tol=tol, options={'disp': True})
 
     return res.x
+
